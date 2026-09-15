@@ -36,7 +36,7 @@ class Painting:
                 f'{width_mark}{height_mark}',
             )
             self.texture_json['texture_data'][stem] = {
-                'textures': f'textures/painting/{stem}'
+                'textures': f'textures/painting/{stem}_replacer'
             }
             for w in range(width_mark):
                 for h in range(height_mark):
@@ -68,9 +68,8 @@ class Painting:
     def bp_generator(
         template: Path, output_dir: Path, stem: str, location: str
     ) -> None:
-        file_name = (
-            f'{stem}_replacer' if 'replacer' in template.stem else f'{stem}_{location}'
-        )
+        replacer = 'replacer' in template.stem
+        file_name = f'{stem}_replacer' if replacer else f'{stem}_{location}'
         table = {
             '(id)': stem,
             '(location)': location,
@@ -83,6 +82,10 @@ class Painting:
         ]
         with open(template, 'r', encoding='utf-8') as f:
             data = f.read()
+        if replacer:
+            data = data.replace(
+                '"minecraft:icon": "(id)",', f'"minecraft:icon": "{stem}_replacer",'
+            )
         for old, new in table.items():
             data = data.replace(old, new)
         write_file(output_dir / stem / f'{file_name}.{flag}.json', data)
