@@ -135,8 +135,7 @@ class Painting:
             stem = painting.stem
             _ = copy2(
                 painting,
-                self.path_map['output_dir']['painting']
-                / f'{painting.stem}_replacer.png',
+                self.path_map['output_dir']['painting'] / f'{stem}_replacer.png',
             )
             self.enlang.append(f'item.painting:{stem}.name={lang_dict.get(stem, stem)}')
             if stem not in lang_dict:
