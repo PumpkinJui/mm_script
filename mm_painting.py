@@ -35,7 +35,7 @@ class Painting:
                 stem,
                 f'{width_mark}{height_mark}',
             )
-            self.texture_json['texture_data'][stem] = {
+            self.texture_json['texture_data'][f'{stem}_replacer'] = {
                 'textures': f'textures/painting/{stem}_replacer'
             }
             for w in range(width_mark):
