@@ -13,6 +13,8 @@ from logging import (
 )
 from pathlib import Path
 from re import search, sub
+from shutil import which
+from subprocess import run
 from time import sleep
 from typing import Final, Literal, TypedDict, cast
 
@@ -561,12 +563,50 @@ class Import:
         write_file('output/RP/texts/en_US.lang', enlang_towrite)
         write_file('output/RP/texts/zh_CN.lang', zhlang_towrite)
 
+    @staticmethod
+    def info_generator() -> None:
+        info_json = Path('output/info.json')
+        info_js = Path('output/info.js')
+        info_ts = Path('output/info.ts')
+        if not info_json.is_file():
+            logger.warning('未找到 info.json，跳过生成。', extra={'pos': 'IMP'})
+            return
+        with open(info_json, 'r', encoding='utf-8') as f:
+            data = dumps(load(f)) if prettier() else f.read()
+        info_js_raw = '/** 所有地图的所有头颅数据。 */\nexport const headData = '
+        info_ts_raw = (
+            '/** 地上头颅的数据。 */\n'
+            'export interface GroundHeadData {\n'
+            '    /** 头颅 ID，不含命名空间。 */\n'
+            '    id: string;\n\n'
+            '    /** 头颅位置，应指定为`"X Y Z"`形式。 */\n'
+            '    location: string;\n\n'
+            '    /** 头颅的旋转朝向。 */\n'
+            '    rotation: number;\n'
+            '}\n\n'
+            '/** 墙上头颅的数据。 */\n'
+            'export interface WallHeadData {\n'
+            '    /** 头颅 ID，不含命名空间。 */\n'
+            '    id: string;\n\n'
+            '    /** 头颅位置，应指定为`"X Y Z"`形式。 */\n'
+            '    location: string;\n\n'
+            '    /** 头颅的旋转朝向。 */\n'
+            '    facing: string;\n'
+            '}\n\n'
+            '/** 所有地图的所有头颅数据。 */\n'
+            'export const headData: Record<string, (GroundHeadData | WallHeadData)[]> = '
+        )
+        write_file(info_js, info_js_raw + data)
+        write_file(info_ts, info_ts_raw + data)
+        _ = prettier([info_js.resolve(), info_ts.resolve()])
+
     def __init__(self) -> None:
         _ = Rename()
         block_template = 'templates/head.block.json'
         item_template = 'templates/head.item.json'
         img_dir = Path('output/RP/textures/entity')
         block_warned, item_warned = True, True
+        Import.info_generator()
         stems = tuple(file.stem for file in img_dir.glob('*.png'))
         if not stems:
             logger.error('无 png 文件！', extra={'pos': self.POS})
@@ -581,15 +621,15 @@ class Import:
         else:
             for stem, _ in stem2wourl:
                 if not Import.bp_generator(stem, block_template) and block_warned:
-                    logger.error(
-                        '未找到模板 %s，跳过 block 生成！',
+                    logger.warning(
+                        '未找到模板 %s，跳过 block 生成。',
                         block_template,
                         extra={'pos': self.POS},
                     )
                     block_warned = False
                 if not Import.bp_generator(stem, item_template) and item_warned:
-                    logger.error(
-                        '未找到模板 %s，跳过 item 生成！',
+                    logger.warning(
+                        '未找到模板 %s，跳过 item 生成。',
                         item_template,
                         extra={'pos': self.POS},
                     )
@@ -749,6 +789,30 @@ def write_file(path: str | Path, content: str) -> None:
         _ = f.write(content)
 
 
+def prettier(paths: list[Path] | None = None, verbose: bool = False) -> bool:
+    if cast(bool, arg_parser().noprettier):
+        if verbose:
+            logger.info('Prettier 已关闭。', extra={'pos': __name__})
+        return False
+    if not (prettier_bin := which('prettier')):
+        if verbose:
+            logger.warning('未检测到 Prettier！', extra={'pos': __name__})
+        return False
+    if not paths:
+        return True
+    result = run(
+        [prettier_bin, '--write', '--ignore-path', '[]', *map(str, paths)],
+        capture_output=True,
+        check=False,
+        encoding='utf-8',
+        text=True,
+    )
+    if result.returncode:
+        logger.warning('Prettier 返回错误：%s', result.stderr, extra={'pos': __name__})
+        return False
+    return True
+
+
 def arg_parser() -> Namespace:
     par = ArgumentParser(description='密室杀手自定义头颅生成器')
     subpar = par.add_subparsers(dest='cmd', required=True)
@@ -763,6 +827,9 @@ def arg_parser() -> Namespace:
     p_imp = subpar.add_parser('imp', help='生成导入数据')
     _ = p_imp.add_argument(
         '-b', '--nobp', action='store_true', help='跳过 BP 输出，即 blocks 和 items'
+    )
+    _ = p_imp.add_argument(
+        '-p', '--noprettier', action='store_true', help='跳过 Prettier'
     )
     _ = subpar.add_parser('revert', help='回退图片命名更改')
     p_diff = subpar.add_parser('diff', help='比较两个文件')
@@ -807,7 +874,7 @@ if __name__ == '__main__':
         print()
     except AssertionError:
         pass
-    except Exception: # pylint: disable=broad-exception-caught
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.exception('未知错误。', extra={'pos': __name__})
     finally:
         _ = input('按回车退出...')
